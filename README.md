@@ -8,7 +8,66 @@ the service ranks them instantly and pushes updates to connected browsers.
 - **Database:** PostgreSQL 16 (DigitalOcean managed, 1 GiB node)
 - **Frontend:** React 19, Vite, TanStack Query, react-hook-form, all API code generated from OpenAPI
 - **Errors:** [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json`
-- **Ops:** DigitalOcean App Platform, Sentry, gitleaks, GitHub Actions
+- **Ops:** DigitalOcean App Platform, gitleaks, GitHub Actions
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Client["React app · browser"]
+    UI["Admin form<br/>Top X · user rank"]
+    SSEC["SSE client"]
+  end
+
+  subgraph Edge["App Platform ingress · TLS"]
+    ING["Router"]
+  end
+
+  WEB["web · static site<br/>Vite build"]
+
+  subgraph API["FastAPI service · Gunicorn, 2 Uvicorn workers"]
+    ROUTES["Routes<br/>Pydantic validation<br/>X-API-Key on writes"]
+    SVC["Leaderboard service"]
+    BROKER["LeaderboardBroker<br/>LISTEN per worker"]
+  end
+
+  subgraph DB["PostgreSQL 16 · lbserv-pg"]
+    TABLES[("leaderboard_entries<br/>score_submissions")]
+    CH["NOTIFY channel<br/>leaderboard_updates"]
+  end
+
+  UI -- "POST /scores" --> ING
+  UI -- "GET /leaderboard, /context" --> ING
+  ING -- "/* first load" --> WEB
+  ING -- "/api/*" --> ROUTES
+  ROUTES --> SVC
+  SVC -- "upsert best score + pg_notify, one transaction" --> TABLES
+  SVC -- "ranked SELECT on index" --> TABLES
+  TABLES -. "on commit" .-> CH
+  CH -. "NOTIFY" .-> BROKER
+  BROKER -. "SSE leaderboard_updated" .-> ING
+  ING -. "event stream" .-> SSEC
+  SSEC -. "invalidate, refetch" .-> UI
+
+  linkStyle 0,5 stroke:#4a74e8,stroke-width:2px
+  linkStyle 7,8,9,10,11 stroke:#1a9e7a,stroke-width:2px
+```
+
+Blue edges are the write path, dotted green edges are the live-update path, and the rest are reads
+and routing.
+
+- **Write a score:** the admin form validates input with the generated zod schema and sends
+  `POST /api/v1/games/{game}/scores` with `X-API-Key`. In one transaction the service logs the
+  submission, upserts the user's best score, and calls `pg_notify`. The response returns the best
+  score, rank, and whether it improved.
+- **Read the board:** TanStack Query calls the generated SDK for the top X or a user's context. The
+  service walks the ranking index (score descending, earliest first) and returns JSON, which the
+  browser validates against zod. Errors arrive as RFC 9457 problem details.
+- **Push live updates:** when the write commits, PostgreSQL notifies each worker's LISTEN
+  connection. Workers stream `leaderboard_updated` over SSE to browsers watching that game, which
+  invalidate their cached queries and refetch, so the database stays the source of truth.
+- **Shared contract:** Pydantic models export `openapi/openapi.json`, which generates the
+  frontend's types, zod schemas, SDK, and SSE client.
 
 ## API
 
@@ -111,15 +170,6 @@ make lint test contract gitleaks
 - CI scans the full git history with gitleaks on every push and PR. Allowlisted items are in
   `.gitleaks.toml` (generated files, lockfiles, local placeholders only).
 
-### Sentry
-
-Error monitoring is off unless configured:
-
-- Backend: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`. Only 5xx responses and
-  unhandled exceptions are reported. PII is not sent.
-- Frontend (build time): `VITE_SENTRY_DSN`, `VITE_SENTRY_ENVIRONMENT`, `VITE_SENTRY_TRACES_SAMPLE_RATE`.
-  Reports render crashes, network failures, and responses that violate the OpenAPI contract.
-
 ## Deploying to DigitalOcean App Platform
 
 The spec in [`.do/app.yaml`](.do/app.yaml) defines:
@@ -136,7 +186,7 @@ The spec in [`.do/app.yaml`](.do/app.yaml) defines:
 doctl databases create lbserv-pg --engine pg --version 16 --region nyc3 --size db-s-1vcpu-1gb --num-nodes 1
 doctl databases db create <cluster-id> lbserv
 doctl apps create --spec .do/app.yaml
-# then set the API_KEY secret (and Sentry DSNs if used) in the control panel and redeploy
+# then set the API_KEY secret in the control panel and redeploy
 ```
 
 ### Database connections

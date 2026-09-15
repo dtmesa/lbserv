@@ -359,6 +359,10 @@ export type CreateGameData = {
 
 export type CreateGameErrors = {
     /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+    /**
      * Unauthorized
      */
     401: ProblemDetails;
@@ -489,6 +493,10 @@ export type SubmitScoreData = {
 };
 
 export type SubmitScoreErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
     /**
      * Unauthorized
      */

@@ -18,5 +18,7 @@ regexTarget = "match"
 regexes = [
   '''dev-api-key''',
   '''test-key''',
+  '''e2e-key''',
+  '''fuzz-key''',
   '''postgres:postgres@''',
 ]

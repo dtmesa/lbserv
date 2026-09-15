@@ -19,7 +19,7 @@ const API_TYPE_NAME =
   '/(Request|Response|Result|Problem|Error|Entry|Score|Submission|Leaderboard|Game|Event|Context|Health|Dto|Payload|Body|Params|Query)s?$/';
 
 export default defineConfig(
-  { ignores: ['dist', 'coverage', 'src/api/generated/**'] },
+  { ignores: ['dist', 'coverage', 'playwright-report', 'test-results', 'src/api/generated/**'] },
 
   {
     files: ['**/*.{ts,tsx,js}'],
@@ -33,6 +33,11 @@ export default defineConfig(
   {
     files: ['src/**/*.{ts,tsx}'],
     extends: [reactHooks.configs.flat['recommended-latest']],
+  },
+
+  {
+    // The generated-types rule also applies to E2E tests.
+    files: ['src/**/*.{ts,tsx}', 'e2e/**/*.ts'],
     rules: {
       // Never cast data into a shape; let the generated types/validators prove it.
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],

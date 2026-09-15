@@ -25,7 +25,7 @@ async def list_games(session: AsyncSession = Depends(get_session)) -> schemas.Ga
     operation_id="createGame",
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_api_key)],
-    responses=problem_responses(401, 409, 422, 500),
+    responses=problem_responses(400, 401, 409, 422, 500),
 )
 async def create_game(
     body: schemas.GameCreate, session: AsyncSession = Depends(get_session)

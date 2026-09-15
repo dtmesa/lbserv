@@ -7,9 +7,14 @@ __pycache__/
 .ruff_cache/
 .coverage
 
+reports/
+.schemathesis/
+
 # Node
 node_modules/
 dist/
+playwright-report/
+test-results/
 *.tsbuildinfo
 
 # Env / OS

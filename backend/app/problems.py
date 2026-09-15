@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import compile_path
 
 from app.config import get_settings
 from app.schemas import ProblemDetails, ProblemError
@@ -124,14 +125,32 @@ async def _handle_validation(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+_HTTP_METHODS = {"GET", "PUT", "POST", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"}
+
+
+def _allowed_methods(request: Request) -> str:
+    """Every method documented for this path; Starlette only reports the first matching route."""
+    methods: set[str] = set()
+    for template, item in request.app.openapi().get("paths", {}).items():
+        regex, _, _ = compile_path(template)
+        if regex.fullmatch(request.url.path):
+            methods.update(m.upper() for m in item if m.upper() in _HTTP_METHODS)
+    if "GET" in methods:
+        methods.add("HEAD")
+    return ", ".join(sorted(methods))
+
+
 async def _handle_http(request: Request, exc: Exception) -> JSONResponse:
     exc = cast(StarletteHTTPException, exc)
+    headers = dict(exc.headers or {})
+    if exc.status_code == 405:
+        headers["Allow"] = _allowed_methods(request)
     return problem_response(
         request,
         status=exc.status_code,
         title=HTTPStatus(exc.status_code).phrase,
         detail=exc.detail if isinstance(exc.detail, str) else None,
-        headers=exc.headers,
+        headers=headers,
     )
 
 

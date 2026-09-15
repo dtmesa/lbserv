@@ -13,6 +13,8 @@ Real-time gaming leaderboard: FastAPI + PostgreSQL backend (`backend/`), React +
 | Regenerate frontend API code | `make gen` → `frontend/src/api/generated/` |
 | Contract drift check | `make contract` |
 | Frontend checks | `make lint-frontend test-frontend` |
+| API fuzzing (Schemathesis) | `make fuzz` (needs Postgres; `lbserv_test`) |
+| Browser E2E (Playwright) | `make e2e` |
 | Secret scan | `make gitleaks` |
 | Migrations | `cd backend && uv run alembic revision -m "..."` then `uv run alembic upgrade head` |
 

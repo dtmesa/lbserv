@@ -16,7 +16,7 @@ export const zGame = z.object({
  */
 export const zGameCreate = z.object({
     id: z.string().regex(/^[a-z0-9-]{1,64}$/),
-    name: z.string().min(1).max(120)
+    name: z.string().min(1).max(120).regex(/^[^\x00-\x1f\x7f]+$/)
 });
 
 /**

@@ -1,5 +1,5 @@
 .PHONY: help install openapi gen contract test test-backend test-frontend lint lint-backend lint-frontend \
-	migrate dev-api dev-web db gitleaks check
+	migrate dev-api dev-web db gitleaks check fuzz e2e
 
 TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/lbserv_test
 GITLEAKS_IMAGE ?= ghcr.io/gitleaks/gitleaks:v8.30.1
@@ -42,6 +42,12 @@ test-frontend: ## Run frontend tests
 
 test: test-backend test-frontend ## Run all tests
 
+fuzz: ## Schemathesis property-based testing of every API operation
+	cd backend && DATABASE_URL=$(TEST_DATABASE_URL) scripts/fuzz.sh
+
+e2e: ## Playwright end-to-end tests against the real API + UI
+	cd frontend && E2E_DATABASE_URL=$(TEST_DATABASE_URL) npm run e2e
+
 lint-backend: ## Ruff + mypy
 	cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy app
 
@@ -54,4 +60,4 @@ gitleaks: ## Scan the working tree for secrets
 	@if command -v gitleaks >/dev/null; then gitleaks dir --config .gitleaks.toml --redact . ; \
 	else docker run --rm -v "$$PWD:/repo" -w /repo $(GITLEAKS_IMAGE) dir --config .gitleaks.toml --redact . ; fi
 
-check: lint test contract gitleaks ## Everything CI runs
+check: lint test fuzz e2e contract gitleaks ## Everything CI runs

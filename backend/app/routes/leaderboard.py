@@ -19,7 +19,7 @@ UserPath = Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,64}$", description="Us
     "/scores",
     operation_id="submitScore",
     dependencies=[Depends(require_api_key)],
-    responses=problem_responses(401, 404, 422, 500),
+    responses=problem_responses(400, 401, 404, 422, 500),
 )
 async def submit_score(
     game_id: GamePath,
@@ -35,11 +35,11 @@ async def submit_score(
 )
 async def get_leaderboard(
     game_id: GamePath,
-    limit: Annotated[int, Query(ge=1, le=100, description="Number of top users")] = 10,
+    query: Annotated[schemas.LeaderboardQuery, Query()],
     session: AsyncSession = Depends(get_session),
 ) -> schemas.Leaderboard:
     """Top users for a game, best first."""
-    return await service.top(session, game_id, limit)
+    return await service.top(session, game_id, query.limit)
 
 
 @router.get(
@@ -50,10 +50,8 @@ async def get_leaderboard(
 async def get_user_context(
     game_id: GamePath,
     user_id: UserPath,
-    neighbors: Annotated[
-        int, Query(ge=0, le=10, description="Users to include above and below")
-    ] = 1,
+    query: Annotated[schemas.UserContextQuery, Query()],
     session: AsyncSession = Depends(get_session),
 ) -> schemas.UserContext:
     """A user's current rank with the users immediately above and below them."""
-    return await service.user_context(session, game_id, user_id, neighbors)
+    return await service.user_context(session, game_id, user_id, query.neighbors)

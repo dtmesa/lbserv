@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lbserv
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lbserv"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: ghcr.io/astral-sh/uv:0.8-python3.12-bookworm-slim
+    command: >
+      sh -c "uv sync --frozen &&
+             uv run alembic upgrade head &&
+             uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/lbserv
+      API_KEY: dev-api-key
+      CORS_ORIGINS: '["http://localhost:5173"]'
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./openapi:/openapi
+      - venv:/opt/venv
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  venv:

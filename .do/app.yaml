@@ -1,0 +1,120 @@
+# DigitalOcean App Platform spec.
+#   Create:  doctl apps create --spec .do/app.yaml
+#   Update:  doctl apps update <app-id> --spec .do/app.yaml
+# Set real values for SECRET envs in the control panel (or via doctl) after the first create.
+name: lbserv
+region: nyc
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    # Dev database to start. For production, point at a managed cluster instead:
+    #   production: true
+    #   cluster_name: lbserv-pg
+    production: false
+
+services:
+  - name: api
+    github:
+      repo: dtmesa/lbserv
+      branch: main
+      deploy_on_push: true
+    source_dir: backend
+    dockerfile_path: backend/Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 10
+      period_seconds: 10
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
+      - key: API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: set-in-control-panel
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        value: "[]"
+      - key: PROBLEM_TYPE_BASE
+        scope: RUN_TIME
+        value: ${APP_URL}/problems/
+      - key: LOG_LEVEL
+        scope: RUN_TIME
+        value: INFO
+      - key: SENTRY_DSN
+        scope: RUN_TIME
+        type: SECRET
+        value: ""
+      - key: SENTRY_ENVIRONMENT
+        scope: RUN_TIME
+        value: production
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        scope: RUN_TIME
+        value: "0.1"
+
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    github:
+      repo: dtmesa/lbserv
+      branch: main
+      deploy_on_push: true
+    source_dir: backend
+    dockerfile_path: backend/Dockerfile
+    run_command: alembic upgrade head
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
+
+static_sites:
+  - name: web
+    github:
+      repo: dtmesa/lbserv
+      branch: main
+      deploy_on_push: true
+    source_dir: frontend
+    build_command: npm ci && npm run build
+    output_dir: dist
+    catchall_document: index.html
+    envs:
+      - key: VITE_SENTRY_DSN
+        scope: BUILD_TIME
+        value: ""
+      - key: VITE_SENTRY_ENVIRONMENT
+        scope: BUILD_TIME
+        value: production
+      - key: VITE_SENTRY_TRACES_SAMPLE_RATE
+        scope: BUILD_TIME
+        value: "0.1"
+
+# One origin: /api → FastAPI (prefix preserved), everything else → the static React app.
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /api
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web

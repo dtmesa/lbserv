@@ -1,0 +1,22 @@
+title = "lbserv gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated code and lockfiles (integrity hashes, not secrets)"
+paths = [
+  '''^frontend/src/api/generated/''',
+  '''^openapi/openapi\.json$''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)uv\.lock$''',
+]
+
+[[allowlists]]
+description = "Local-only development and test placeholders"
+regexTarget = "match"
+regexes = [
+  '''dev-api-key''',
+  '''test-key''',
+  '''postgres:postgres@''',
+]

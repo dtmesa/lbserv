@@ -1,5 +1,5 @@
 .PHONY: help install openapi gen contract test test-backend test-frontend lint lint-backend lint-frontend \
-	migrate dev-api dev-web db gitleaks check fuzz e2e
+	migrate dev-api dev-web db gitleaks check fuzz e2e seed smoke
 
 TEST_DATABASE_URL ?= postgresql://postgres:postgres@localhost:5432/lbserv_test
 GITLEAKS_IMAGE ?= ghcr.io/gitleaks/gitleaks:v8.30.1
@@ -41,6 +41,12 @@ test-frontend: ## Run frontend tests
 	cd frontend && npm test
 
 test: test-backend test-frontend ## Run all tests
+
+seed: ## Seed placeholder games (pacman 50, galaga 150, donkey-kong 250) via the API; BASE_URL, SEED_API_KEY
+	cd backend && PYTHONPATH=. uv run python scripts/seed.py $${BASE_URL:-http://localhost:8000}
+
+smoke: ## Smoke-test a deployment (creates a smoke-* game); BASE_URL, SMOKE_API_KEY
+	cd backend && PYTHONPATH=. uv run python scripts/smoke.py $$BASE_URL
 
 fuzz: ## Schemathesis property-based testing of every API operation
 	cd backend && DATABASE_URL=$(TEST_DATABASE_URL) scripts/fuzz.sh

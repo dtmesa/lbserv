@@ -20,8 +20,9 @@ def get_engine() -> AsyncEngine:
         settings.sqlalchemy_url,
         connect_args={"ssl": settings.ssl},
         pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=5,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_timeout=settings.db_pool_timeout_seconds,
     )
 
 

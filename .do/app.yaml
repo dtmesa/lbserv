@@ -10,13 +10,16 @@ alerts:
   - rule: DOMAIN_FAILED
 
 databases:
-  - name: db
+  # Managed PostgreSQL 16 cluster (1 GiB node, 22 backend connections), created separately:
+  #   doctl databases create lbserv-pg --engine pg --version 16 --region nyc3 \
+  #     --size db-s-1vcpu-1gb --num-nodes 1
+  #   doctl databases db create <cluster-id> lbserv
+  - name: pg
     engine: PG
     version: "16"
-    # Dev database to start. For production, point at a managed cluster instead:
-    #   production: true
-    #   cluster_name: lbserv-pg
-    production: false
+    production: true
+    cluster_name: lbserv-pg
+    db_name: lbserv
 
 services:
   - name: api
@@ -36,10 +39,10 @@ services:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${db.DATABASE_URL}
+        value: ${pg.DATABASE_URL}
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
-        value: ${db.CA_CERT}
+        value: ${pg.CA_CERT}
       - key: API_KEY
         scope: RUN_TIME
         type: SECRET
@@ -53,6 +56,16 @@ services:
       - key: LOG_LEVEL
         scope: RUN_TIME
         value: INFO
+      # 2 workers x (1 LISTEN + 2 pooled + 2 overflow) = 10 per instance; <= 21 during deploys.
+      - key: WEB_CONCURRENCY
+        scope: RUN_TIME
+        value: "2"
+      - key: DB_POOL_SIZE
+        scope: RUN_TIME
+        value: "2"
+      - key: DB_MAX_OVERFLOW
+        scope: RUN_TIME
+        value: "2"
       - key: SENTRY_DSN
         scope: RUN_TIME
         type: SECRET
@@ -78,10 +91,10 @@ jobs:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${db.DATABASE_URL}
+        value: ${pg.DATABASE_URL}
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
-        value: ${db.CA_CERT}
+        value: ${pg.CA_CERT}
 
 static_sites:
   - name: web

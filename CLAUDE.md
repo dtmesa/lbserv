@@ -15,6 +15,8 @@ Real-time gaming leaderboard: FastAPI + PostgreSQL backend (`backend/`), React +
 | Frontend checks | `make lint-frontend test-frontend` |
 | API fuzzing (Schemathesis) | `make fuzz` (needs Postgres; `lbserv_test`) |
 | Browser E2E (Playwright) | `make e2e` |
+| Seed placeholder data | `BASE_URL=... SEED_API_KEY=... make seed` |
+| Smoke-test a deployment | `BASE_URL=... SMOKE_API_KEY=... make smoke` |
 | Secret scan | `make gitleaks` |
 | Migrations | `cd backend && uv run alembic revision -m "..."` then `uv run alembic upgrade head` |
 
@@ -50,6 +52,10 @@ The Pydantic models in `backend/app/schemas.py` are the single source of truth f
   `best_score DESC, achieved_at ASC, user_id ASC` (see `backend/app/services/leaderboard.py`).
 - Scores are capped at `2**53 - 1` so they stay exact in JavaScript.
 - Real-time updates: `pg_notify` inside the score transaction → `LeaderboardBroker` → SSE.
+- Production runs Gunicorn with Uvicorn workers (`backend/gunicorn.conf.py`); each worker has its
+  own DB pool and LISTEN connection. Keep `WEB_CONCURRENCY × (1 + DB_POOL_SIZE + DB_MAX_OVERFLOW)`
+  within the database's connection limit (see `tests/test_gunicorn.py`). Local dev uses uvicorn
+  `--reload`.
 - Secrets never go in the repo. Gitleaks runs in pre-commit and CI; use `.env` (gitignored) locally
   and App Platform secrets in production.
 - Sentry is enabled only when `SENTRY_DSN` (backend) / `VITE_SENTRY_DSN` (frontend) is set. Only 5xx

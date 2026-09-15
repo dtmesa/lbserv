@@ -13,6 +13,8 @@ dependencies = [
   "alembic>=1.14",
   "sse-starlette>=2.1",
   "sentry-sdk[fastapi]>=2.19",
+  "gunicorn>=23",
+  "uvicorn-worker>=0.3",
 ]
 
 [dependency-groups]

@@ -3,8 +3,9 @@
 A REST API and small React UI for a real-time gaming leaderboard. Users submit scores per game;
 the service ranks them instantly and pushes updates to connected browsers.
 
-- **Backend:** Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async) + asyncpg, Alembic
-- **Database:** PostgreSQL 16
+- **Backend:** Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async) + asyncpg, Alembic,
+  Gunicorn + Uvicorn workers
+- **Database:** PostgreSQL 16 (DigitalOcean managed, 1 GiB node)
 - **Frontend:** React 19, Vite, TanStack Query, react-hook-form, all API code generated from OpenAPI
 - **Errors:** [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json`
 - **Ops:** DigitalOcean App Platform, Sentry, gitleaks, GitHub Actions
@@ -123,24 +124,44 @@ Error monitoring is off unless configured:
 
 The spec in [`.do/app.yaml`](.do/app.yaml) defines:
 
-- `api`: a service built from `backend/Dockerfile`, health-checked at `/api/health`
+- `api`: a service built from `backend/Dockerfile`, running Gunicorn with 2 Uvicorn workers,
+  health-checked at `/api/health`
 - `migrate`: a `PRE_DEPLOY` job that runs `alembic upgrade head`
 - `web`: a static site built from `frontend/`
-- `db`: PostgreSQL 16
+- `pg`: the managed PostgreSQL 16 cluster `lbserv-pg` (database `lbserv`), created separately
 - ingress rules: `/api` goes to `api` and everything else goes to `web`, so it's one origin with no
   CORS
 
 ```bash
+doctl databases create lbserv-pg --engine pg --version 16 --region nyc3 --size db-s-1vcpu-1gb --num-nodes 1
+doctl databases db create <cluster-id> lbserv
 doctl apps create --spec .do/app.yaml
-# then, in the control panel (Settings → components), set the API_KEY and SENTRY_DSN secrets
-# and VITE_SENTRY_DSN, then redeploy
+# then set the API_KEY secret (and Sentry DSNs if used) in the control panel and redeploy
+```
+
+### Database connections
+
+A 1 GiB node allows 22 backend connections. Each Gunicorn worker holds 1 LISTEN connection plus
+a SQLAlchemy pool (`DB_POOL_SIZE` + `DB_MAX_OVERFLOW`):
+
+| | Per worker | Per instance (2 workers) | Deploy overlap + migrate job |
+|---|---|---|---|
+| Default | ≤ 5 | ≤ 10 | ≤ 21 |
+
+SSE viewers don't consume database connections. When scaling out, lower the pool per worker or put
+DigitalOcean's PgBouncer pool in front of regular queries (LISTEN must stay on a direct connection).
+
+### Operations
+
+```bash
+BASE_URL=https://<app>.ondigitalocean.app SEED_API_KEY=... make seed    # placeholder games
+BASE_URL=https://<app>.ondigitalocean.app SMOKE_API_KEY=... make smoke  # creates a smoke-* game
 ```
 
 Notes:
 
 - The GitHub app must have access to `dtmesa/lbserv`.
-- Dev databases on PostgreSQL 15+ may not grant `CREATE` on the `public` schema to the app user.
-  If the migrate job fails with a permission error, use a managed cluster (see the comment in the
-  spec) or grant the privilege once.
+- `doctl apps update --spec .do/app.yaml` resets `SECRET` values to the placeholders in the file.
+  Edit secrets in the control panel, or start from `doctl apps spec get <app-id>`.
 - SSE streams stay open behind App Platform's proxy. The server sends a comment every 15s, and
-  clients reconnect automatically.
+  clients reconnect automatically after deploys.

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # DigitalOcean injects libpq-style URLs, e.g. postgresql://u:p@host:25060/db?sslmode=require
     database_url: str = "postgresql://postgres:postgres@localhost:5432/lbserv"
     database_ca_cert: str | None = None
+    # Per worker process. See gunicorn.conf.py for the connection budget.
+    db_pool_size: int = Field(default=2, ge=1, le=50)
+    db_max_overflow: int = Field(default=2, ge=0, le=50)
+    db_pool_timeout_seconds: float = Field(default=10.0, gt=0)
     api_key: SecretStr = SecretStr("dev-api-key")
     log_level: str = "INFO"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
